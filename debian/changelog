@@ -1,3 +1,9 @@
+okapi (1.2.0-1ubuntu1) xenial; urgency=medium
+
+  * Imported Upstream version 1.2.0
+
+ -- John Malconian <malc@indexdata.com>  Tue, 28 Mar 2017 14:51:36 +0000
+
 okapi (1.2.0-1) stable; urgency=low
 
   * upstream 
