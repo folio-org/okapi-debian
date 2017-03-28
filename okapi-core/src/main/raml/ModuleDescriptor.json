@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "ModuleDescriptor",
+  "type": "object",
+  "properties": {
+    "id": {"type": "string"},
+    "name": {"type": "string"},
+    "tags" : {"type" : ["array", "null"],
+      "items" : {"type": "string"}
+    },
+    "env": {
+      "$ref": "EnvEntryList.json"
+    },
+    "requires": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "provides": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "interfaceType": {
+            "type": ["string", "null"]
+          },
+          "handlers": {
+            "type": ["array", "null"],
+            "items": {
+              "$ref": "RoutingEntry.json"
+            }
+          },
+          "routingEntries": {
+            "type": ["array", "null"],
+            "items": {
+              "$ref": "RoutingEntry.json"
+            }
+          },
+          "permissionSets": {
+            "type": ["array", "null"],
+            "items": {
+              "$ref": "Permission.json"
+            }
+          }
+        }
+      }
+    },
+    "filters": {
+      "type": "array",
+      "items": {
+        "$ref": "RoutingEntry.json"
+      }
+    },
+    "routingEntries": {
+      "type": "array",
+      "items": {
+        "$ref": "RoutingEntry.json"
+      }
+    },
+    "modulePermissions" : {
+      "type": ["array","null"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "uiDescriptor": {
+      "$ref": "UiModuleDescriptor.json"
+    },
+    "launchDescriptor": {
+      "$ref": "LaunchDescriptor.json"
+    },
+    "tenantInterface": {"type": "string"}
+  },
+  "required": ["id", "name"]
+}
