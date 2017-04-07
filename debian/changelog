@@ -1,3 +1,9 @@
+okapi (1.2.3-1) xenial; urgency=medium
+
+  * Imported Upstream version 1.2.3
+
+ -- John Malconian <malc@indexdata.com>  Fri, 07 Apr 2017 21:52:30 +0000
+
 okapi (1.2.2-1) xenial; urgency=medium
 
   * Imported Upstream version 1.2.2
