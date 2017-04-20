@@ -1,7 +1,8 @@
 [Unit]
 Description=FOLIO Okapi service
 Wants=postgresql.service
-After=network-online.target
+After=network-online.target postgresql.service
+
 
 [Service]
 EnvironmentFile=/etc/default/okapi
