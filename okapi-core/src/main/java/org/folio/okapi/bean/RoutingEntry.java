@@ -253,7 +253,18 @@ public class RoutingEntry {
       && (pathPattern == null || pathPattern.isEmpty())) {
       return "Bad routing entry, needs a pathPattern or at least a path";
     }
-    if (pathPattern == null || pathPattern.isEmpty()) {
+
+    if ("redirect".equals(type)) {
+      if (redirectPath == null || redirectPath.isEmpty()) {
+        return "Redirect entry without redirectPath";
+      }
+    } else {
+      if (redirectPath != null && !redirectPath.isEmpty()) {
+        logger.warn(prefix
+          + "has a redirectPath, even though it is not a redirect");
+      }
+
+      if (pathPattern == null || pathPattern.isEmpty()) {
       logger.warn(prefix
         + " uses old type path"
         + ". Use a pathPattern instead");
@@ -274,12 +285,14 @@ public class RoutingEntry {
     if ("system".equals(type)) {
       logger.warn(prefix
         + "uses DEPRECATED type 'system'");
+      }
+
     }
 
     if (null != section)
       switch (section) {
         case "handlers":
-          String err = validateHandlers(mod);
+          String err = validateHandlers(prefix);
           if (!err.isEmpty()) {
             return err;
           }
@@ -303,12 +316,12 @@ public class RoutingEntry {
   private String validateHandlers(String prefix) {
     if (phase != null) {
       logger.warn(prefix
-        + "RoutingEntry uses 'phase' in the handlers section. "
+        + "uses 'phase' in the handlers section. "
         + "Leave it out");
     }
     if (type != null && "request-response".equals(type)) {
       logger.warn(prefix
-        + "RoutingEntry uses type=request-response. "
+        + "uses type=request-response. "
         + "That is the default, you can leave it out");
     }
     return "";
