@@ -444,6 +444,10 @@ modules, Okapi does not enforce it for modules. The reason is that Okapi does
 not need to know anything about module versions -- it only worries about the
 interfaces being compatible.
 
+Okapi does require that all modules that have the same id, will indeed be the
+same piece of software. We have adopted a convention of using ids that consist
+of a short name, followed by a software version. For example "test-basic-1.2.0".
+
 When checking interface versions, Okapi will require that the major version
 number matches exactly what is required, and that the minor version is at least
 as high as required.
@@ -661,16 +665,36 @@ to the next. At the moment, MongoDB and PostgreSQL storage can be enabled by
 option `-Dstorage=mongo` and  `-Dstorage=postgres` respectively to the command
 line that starts Okapi.
 
-PostgreSQL requires some tables and indexes to be created. This can be done with
-the command initdatabase, for example
+We are moving away from the Mongo backend. For its command line options, you
+will have to look in the code in MongoHandle.java.
+
+Initializing the PostgreSQL database is a two-step operation. First we need to
+create a user and a database in PostgreSQL. This needs to be only once on any
+given machine. On a Debian box that will be something like this:
+```
+   sudo -u postgres -i
+   createuser -P okapi   # When it asks for a password, enter okapi25
+   createdb -O okapi okapi
+```
+The values 'okapi', 'okapi25', and 'okapi' are defaults intended for
+development use only. In real production, some DBA will have to set up
+a proper database and its parameters, which will need to be passed to
+Okapi on the command line.
+
+The second step is creating the necessary tables and indexes. Okapi can do this
+for you, when invoked like this:
 ```
 java -Dport=8600 -Dstorage=postgres -jar target/okapi-core-fat.jar initdatabase
 ```
 This command creates the necessary stuff, and exits Okapi. If you want to clear
 things up, you can use the command `purgedatabase`.
 
-The Mongo backend does not respect these commands, and the in-memory backed has
-no need for them.
+If you need to dig into Okapi's PostgreSQL database, you can do it with a
+command like this:
+```
+psql -U okapi postgresql://localhost:5432/okapi
+```
+
 
 ### Curl examples
 
@@ -881,7 +905,8 @@ END
 The id is what we will be using to refer to this module later. The version number
 is included in the id, so that the id uniquely identifies exactly what module
 we are talking about. (Okapi does not enforce this, it is also possible to use
-UUIDs or other things, as long as they are truly unique.)
+UUIDs or other things, as long as they are truly unique, but we have decided to
+recommend this naming shceme for all modules.)
 
 This module provides just one interface, called `test-basic`. It has one handler
 that indicates that the interface is interested in GET and POST requests to the
