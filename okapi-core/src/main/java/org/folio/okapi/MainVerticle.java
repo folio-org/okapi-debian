@@ -172,7 +172,7 @@ public class MainVerticle extends AbstractVerticle {
       moduleManager.setTenantManager(tenantManager);
       envService = new EnvService(envManager);
       discoveryManager.setModuleManager(moduleManager);
-      storage = new Storage(vertx, storageType, initMode, config);
+      storage = new Storage(vertx, storageType, config);
       ModuleStore moduleStore = storage.getModuleStore();
       TimeStampStore timeStampStore = storage.getTimeStampStore();
       TenantStore tenantStore = storage.getTenantStore();
@@ -195,10 +195,10 @@ public class MainVerticle extends AbstractVerticle {
   @Override
   public void start(Future<Void> fut) {
     if (storage != null) {
-      storage.resetDatabases(res -> {
+      storage.prepareDatabases(initMode, res -> {
         if (res.failed()) {
           logger.fatal("start failed", res.cause());
-          fut.complete();
+          fut.fail(res.cause());
         } else {
           if (initMode != NORMAL) {
             logger.info("Database operation " + initMode.toString() + " done. Exiting");
@@ -298,11 +298,12 @@ public class MainVerticle extends AbstractVerticle {
             .allowedHeader(XOkapiHeaders.TENANT)
             .allowedHeader(XOkapiHeaders.TOKEN)
             .allowedHeader(XOkapiHeaders.AUTHORIZATION)
-            //expose response headers
+      .allowedHeader(XOkapiHeaders.REQUEST_ID)            //expose response headers
             .exposedHeader(HttpHeaders.LOCATION.toString())
             .exposedHeader(XOkapiHeaders.TRACE)
             .exposedHeader(XOkapiHeaders.TOKEN)
             .exposedHeader(XOkapiHeaders.AUTHORIZATION)
+      .exposedHeader(XOkapiHeaders.REQUEST_ID)
     );
 
     // Paths that start with /_/ are okapi internal configuration
