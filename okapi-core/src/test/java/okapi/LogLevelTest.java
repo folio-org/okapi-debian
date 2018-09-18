@@ -1,32 +1,33 @@
 package okapi;
 
+import io.restassured.RestAssured;
+import static io.restassured.RestAssured.given;
 import org.folio.okapi.MainVerticle;
-import com.jayway.restassured.RestAssured;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Vertx;
-import static com.jayway.restassured.RestAssured.*;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import org.junit.runner.RunWith;
 
+@java.lang.SuppressWarnings({"squid:S1192"})
 @RunWith(VertxUnitRunner.class)
 public class LogLevelTest {
 
-  Vertx vertx;
+  private Vertx vertx;
 
-  private final int port = Integer.parseInt(System.getProperty("port", "9130"));
+  private final int port = 9230;
 
   @Before
   public void setUp(TestContext context) {
     vertx = Vertx.vertx();
 
     DeploymentOptions opt = new DeploymentOptions()
-            .setConfig(new JsonObject().put("storage", "inmemory"));
+      .setConfig(new JsonObject().put("port", Integer.toString(port)));
     vertx.deployVerticle(MainVerticle.class.getName(), opt, context.asyncAssertSuccess());
   }
 
@@ -43,23 +44,22 @@ public class LogLevelTest {
     RestAssured.port = port;
 
     String currentLevel = given().get("/_/test/loglevel").then()
-            .assertThat().statusCode(200).extract().body().asString();
+      .assertThat().statusCode(200).extract().body().asString();
 
     String trace = "{\"level\":\"TRACE\"}";
-    String post = given()
-            .header("Content-Type", "application/json")
-            .body(trace)
-            .post("/_/test/loglevel").then()
-            .assertThat().statusCode(200).extract().body().asString();
+    given().header("Content-Type", "application/json")
+      .body(trace)
+      .post("/_/test/loglevel").then()
+      .assertThat().statusCode(200);
 
-    String newLevel = given().get("/_/test/loglevel").then()
-            .assertThat().statusCode(200).extract().body().asString();
+    given().get("/_/test/loglevel").then()
+      .assertThat().statusCode(200);
 
     given() // Put the level back to what it was
-            .header("Content-Type", "application/json")
-            .body(currentLevel)
-            .post("/_/test/loglevel").then()
-            .assertThat().statusCode(200).extract().body().asString();
+      .header("Content-Type", "application/json")
+      .body(currentLevel)
+      .post("/_/test/loglevel").then()
+      .assertThat().statusCode(200);
 
   }
 }

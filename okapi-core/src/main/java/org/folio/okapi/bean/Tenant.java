@@ -2,6 +2,7 @@ package org.folio.okapi.bean;
 
 import com.fasterxml.jackson.annotation.*;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.TreeMap;
 
 /**
@@ -13,53 +14,28 @@ import java.util.TreeMap;
 public class Tenant {
 
   @JsonProperty
-  final private TenantDescriptor descriptor;
+  private final TenantDescriptor descriptor;
   // id and name, and that kind of stuff
 
   @JsonProperty
-  final private TreeMap<String, Boolean> enabled;
+  private SortedMap<String, Boolean> enabled;
   // Note that this can not just be a Map, or the order of enabled modules
   // will be undefined. That should not harm in real life, but it messes up
   // our tests!
 
-  @JsonIgnore
-  private long timestamp;
-
   public Tenant(TenantDescriptor descriptor) {
     this.descriptor = descriptor;
     this.enabled = new TreeMap<>();
-    this.timestamp = 0;
   }
 
-  public Tenant(TenantDescriptor descriptor, TreeMap<String, Boolean> enabled) {
+  public Tenant(TenantDescriptor descriptor, SortedMap<String, Boolean> enabled) {
     this.descriptor = descriptor;
     this.enabled = enabled;
-    this.timestamp = 0;
   }
 
   public Tenant() {
     this.descriptor = new TenantDescriptor();
     this.enabled = new TreeMap<>();
-    this.timestamp = 0;
-  }
-
-  /**
-   * Copy constructor. Makes separate copies of everything.
-   *
-   * @param other
-   */
-  public Tenant(Tenant other) {
-    this.descriptor = new TenantDescriptor(other.descriptor);
-    this.enabled = new TreeMap<>(other.enabled);
-    this.timestamp = 0;
-  }
-
-  public long getTimestamp() {
-    return timestamp;
-  }
-
-  public void setTimestamp(long timestamp) {
-    this.timestamp = timestamp;
   }
 
   /**
@@ -82,8 +58,17 @@ public class Tenant {
     return descriptor;
   }
 
-  public TreeMap<String, Boolean> getEnabled() {
+  /**
+   * Get enabled modules. (Note - if we ever start to store false values in the
+   * map, we need to filter them out here - this needs to return only enabled
+   * modules)
+   */
+  public SortedMap<String, Boolean> getEnabled() {
     return enabled;
+  }
+
+  public void setEnabled(SortedMap<String, Boolean> enabled) {
+    this.enabled = enabled;
   }
 
   public void enableModule(String n) {

@@ -1,63 +1,25 @@
 {
   "$schema": "http://json-schema.org/draft-04/schema#",
   "title": "ModuleDescriptor",
+  "description": "A Folio Module",
   "type": "object",
+  "additionalProperties" : false,
   "properties": {
     "id": {"type": "string"},
     "name": {"type": "string"},
     "tags" : {"type" : ["array", "null"],
       "items" : {"type": "string"}
     },
-    "env": {
-      "$ref": "EnvEntryList.json"
-    },
     "requires": {
       "type": ["array", "null"],
       "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "version": {
-            "type": "string"
-          }
-        }
+        "$ref": "InterfaceReference.json"
       }
     },
     "provides": {
       "type": ["array", "null"],
       "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "version": {
-            "type": "string"
-          },
-          "interfaceType": {
-            "type": ["string", "null"]
-          },
-          "handlers": {
-            "type": ["array", "null"],
-            "items": {
-              "$ref": "RoutingEntry.json"
-            }
-          },
-          "routingEntries": {
-            "type": ["array", "null"],
-            "items": {
-              "$ref": "RoutingEntry.json"
-            }
-          },
-          "permissionSets": {
-            "type": ["array", "null"],
-            "items": {
-              "$ref": "Permission.json"
-            }
-          }
-        }
+        "$ref": "InterfaceDescriptor.json"
       }
     },
     "filters": {
@@ -66,16 +28,10 @@
         "$ref": "RoutingEntry.json"
       }
     },
-    "routingEntries": {
-      "type": "array",
+    "permissionSets": {
+      "type": ["array", "null"],
       "items": {
-        "$ref": "RoutingEntry.json"
-      }
-    },
-    "modulePermissions" : {
-      "type": ["array","null"],
-      "items": {
-        "type": "string"
+        "$ref": "Permission.json"
       }
     },
     "uiDescriptor": {
@@ -83,8 +39,7 @@
     },
     "launchDescriptor": {
       "$ref": "LaunchDescriptor.json"
-    },
-    "tenantInterface": {"type": "string"}
+    }
   },
-  "required": ["id", "name"]
+  "required": ["id"]
 }

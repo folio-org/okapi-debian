@@ -8,8 +8,14 @@ public class Permission {
   private String displayName;
   private String description;
   private String[] subPermissions;
+  private Boolean visible;
 
   public Permission() {
+    this.permissionName = null;
+    this.displayName = null;
+    this.description = null;
+    this.subPermissions = null;
+    this.visible = null;
   }
 
   public Permission(Permission other) {
@@ -17,6 +23,7 @@ public class Permission {
     this.displayName = other.displayName;
     this.description = other.description;
     this.subPermissions = other.subPermissions;
+    this.visible = other.visible;
   }
 
   public String getPermissionName() {
@@ -49,6 +56,14 @@ public class Permission {
 
   public void setSubPermissions(String[] subPermissions) {
     this.subPermissions = subPermissions;
+  }
+
+  public Boolean getVisible() {
+    return visible;
+  }
+
+  public void setVisible(Boolean visible) {
+    this.visible = visible;
   }
 
 }

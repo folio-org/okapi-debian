@@ -4,7 +4,6 @@ import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
-import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.asyncsql.AsyncSQLClient;
 import io.vertx.ext.asyncsql.PostgreSQLClient;
 import io.vertx.ext.sql.SQLConnection;
@@ -12,6 +11,7 @@ import static org.folio.okapi.common.ErrorType.INTERNAL;
 import org.folio.okapi.common.Config;
 import org.folio.okapi.common.ExtendedAsyncResult;
 import org.folio.okapi.common.Failure;
+import org.folio.okapi.common.OkapiLogger;
 import org.folio.okapi.common.Success;
 
 /*
@@ -36,10 +36,10 @@ import org.folio.okapi.common.Success;
  * See /etc/postgresql/version/main/pg_hba.conf
  *
  */
-public class PostgresHandle {
+@java.lang.SuppressWarnings({"squid:S1192"})
+class PostgresHandle {
 
   private AsyncSQLClient cli;
-  private final Logger logger = LoggerFactory.getLogger("okapi");
 
   public PostgresHandle(Vertx vertx, JsonObject conf) {
     JsonObject pgconf = new JsonObject();
@@ -50,6 +50,7 @@ public class PostgresHandle {
       pgconf.put("host", val);
     }
     val = Config.getSysConf("postgres_port", "", conf);
+    Logger logger = OkapiLogger.get();
     if (!val.isEmpty()) {
       try {
         Integer x = Integer.parseInt(val);
@@ -86,14 +87,8 @@ public class PostgresHandle {
     });
   }
 
-  public void closeConnection(SQLConnection conn) {
-    conn.close(cres -> {
-      if (cres.failed()) {
-        logger.fatal("Closing handle failed: "
-                + cres.cause().getMessage());
-      }
-    });
+  public PostgresQuery getQuery() {
+    return new PostgresQuery(this);
   }
-
 
 }
