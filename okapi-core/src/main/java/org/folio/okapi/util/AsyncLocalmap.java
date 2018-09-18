@@ -1,19 +1,24 @@
 package org.folio.okapi.util;
 
 import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.shareddata.AsyncMap;
 import io.vertx.core.shareddata.LocalMap;
 import io.vertx.core.shareddata.SharedData;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.folio.okapi.common.Success;
 
 /**
  * Encapsulating vert.x LocalMap so it looks like a ClusterWideMap.
  */
-public class AsyncLocalmap<K, V> implements AsyncMap<K, V> {
+@java.lang.SuppressWarnings("squid:S1192")
+class AsyncLocalmap<K, V> implements AsyncMap<K, V> {
 
-  LocalMap<K, V> map = null;
+  private LocalMap<K, V> map = null;
 
   public AsyncLocalmap(Vertx vertx, String mapName) {
     SharedData sd = vertx.sharedData();
@@ -28,9 +33,7 @@ public class AsyncLocalmap<K, V> implements AsyncMap<K, V> {
 
   @Override
   public void put(K k, V v, Handler<AsyncResult<Void>> completionHandler) {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
-    //map.put(k, v);
-    //completionHandler.handle(new Success<>());
+    throw new UnsupportedOperationException("Not supported yet.");
   }
 
   @Override
@@ -74,7 +77,7 @@ public class AsyncLocalmap<K, V> implements AsyncMap<K, V> {
   @Override
   public void replace(K k, V v, Handler<AsyncResult<V>> resultHandler) {
     // This is an unsafe operation!
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    throw new UnsupportedOperationException("Not supported yet.");
   }
 
   @Override
@@ -90,12 +93,28 @@ public class AsyncLocalmap<K, V> implements AsyncMap<K, V> {
 
   @Override
   public void clear(Handler<AsyncResult<Void>> resultHandler) {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    map.clear();
+    resultHandler.handle(Future.succeededFuture());
   }
 
   @Override
   public void size(Handler<AsyncResult<Integer>> resultHandler) {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    resultHandler.handle(Future.succeededFuture(map.size()));
+  }
+
+  @Override
+  public void keys(Handler<AsyncResult<Set<K>>> hndlr) {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public void values(Handler<AsyncResult<List<V>>> hndlr) {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public void entries(Handler<AsyncResult<Map<K, V>>> hndlr) {
+    throw new UnsupportedOperationException("Not supported yet.");
   }
 
 }

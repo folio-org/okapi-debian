@@ -4,6 +4,7 @@ import org.folio.okapi.util.ModuleHandle;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import io.vertx.core.json.DecodeException;
 
 /**
  * Description of one deployed module. Refers to one running instance of a
@@ -22,12 +23,15 @@ public class DeploymentDescriptor {
   private ModuleHandle moduleHandle;
 
   public DeploymentDescriptor() {
+    this.instId = null;
+    this.srvcId = null;
+    this.url = null;
+    this.descriptor = null;
+    this.moduleHandle = null;
   }
 
   public DeploymentDescriptor(String instId, String srvcId,
-          String url,
-          LaunchDescriptor descriptor,
-          ModuleHandle moduleHandle) {
+    String url, LaunchDescriptor descriptor, ModuleHandle moduleHandle) {
     this.instId = instId;
     this.srvcId = srvcId;
     this.url = url;
@@ -57,6 +61,9 @@ public class DeploymentDescriptor {
   }
 
   public void setSrvcId(String srvcId) {
+    if (srvcId.isEmpty()) {
+      throw new DecodeException("Empty srvcId not allowed");
+    }
     this.srvcId = srvcId;
   }
 

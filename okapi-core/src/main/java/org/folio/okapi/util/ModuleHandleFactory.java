@@ -6,13 +6,18 @@ import org.folio.okapi.bean.Ports;
 
 public class ModuleHandleFactory {
 
-  public static ModuleHandle create(Vertx vertx, LaunchDescriptor desc,
-          Ports ports, int port) {
+  private ModuleHandleFactory() {
+    throw new IllegalAccessError("ModuleHandleFactory");
+  }
+
+  public static ModuleHandle create(Vertx vertx, LaunchDescriptor desc, String id,
+    Ports ports, int port) {
+
     ModuleHandle mh = null;
     if (desc.getDockerImage() == null) {
       mh = new ProcessModuleHandle(vertx, desc, ports, port);
     } else if (desc.getDockerImage() != null) {
-      mh = new DockerModuleHandle(vertx, desc, ports, port);
+      mh = new DockerModuleHandle(vertx, desc, id, ports, port);
     }
     return mh;
   }

@@ -3,11 +3,11 @@ package org.folio.okapi.bean;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import io.vertx.core.logging.Logger;
-import io.vertx.core.logging.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.folio.okapi.util.ProxyContext;
+import org.folio.okapi.common.ModuleId;
 
 /**
  * Description of a module. These are used when creating modules under
@@ -15,70 +15,67 @@ import java.util.List;
  *
  */
 @JsonInclude(Include.NON_NULL)
-public class ModuleDescriptor {
-  private final Logger logger = LoggerFactory.getLogger("okapi");
-
-  private String id;
+public class ModuleDescriptor implements Comparable<ModuleDescriptor> {
+  private ModuleId id;
   private String name;
 
   private String[] tags;
-  private EnvEntry[] env;
-
-  private ModuleInterface[] requires;
-  private ModuleInterface[] provides;
-  private RoutingEntry[] routingEntries; //DEPRECATED
+  private InterfaceDescriptor[] requires;
+  private InterfaceDescriptor[] provides;
   private RoutingEntry[] filters;
   private Permission[] permissionSets;
-  private String[] modulePermissions; // DEPRECATED
   private UiModuleDescriptor uiDescriptor;
   private LaunchDescriptor launchDescriptor;
-  private String tenantInterface; // DEPRECATED
 
   public ModuleDescriptor() {
+    this.id = null;
+    this.name = null;
+    this.tags = null;
+    this.filters = null;
+    this.requires = null;
+    this.provides = null;
+    this.permissionSets = null;
+    this.uiDescriptor = null;
+    this.launchDescriptor = null;
   }
 
   /**
    * Copy constructor.
    *
    * @param other
+   * @param full
    */
-  public ModuleDescriptor(ModuleDescriptor other) {
+  public ModuleDescriptor(ModuleDescriptor other, boolean full) {
     this.id = other.id;
     this.name = other.name;
     this.tags = other.tags;
-    this.env = other.env;
-    this.routingEntries = other.routingEntries;
-    this.filters = other.filters;
-    this.requires = other.requires;
-    this.provides = other.provides;
-    this.permissionSets = other.permissionSets;
-    this.modulePermissions = other.modulePermissions;
-    this.uiDescriptor = other.uiDescriptor;
-    this.launchDescriptor = other.launchDescriptor;
-    this.tenantInterface = other.tenantInterface;
+    if (full) {
+      this.filters = other.filters;
+      this.requires = other.requires;
+      this.provides = other.provides;
+      this.permissionSets = other.permissionSets;
+      this.uiDescriptor = other.uiDescriptor;
+      this.launchDescriptor = other.launchDescriptor;
+    }
   }
 
   public String getId() {
-    return id;
+    return id != null ? id.getId() : null;
   }
 
-  public void setId(String id) {
-    this.id = id;
+  public void setId(String s) {
+    this.id = new ModuleId(s);
+    if (!this.id.hasSemVer()) {
+      throw new IllegalArgumentException("Missing semantic version for: " + s);
+    }
   }
+
   public String getName() {
     return name;
   }
 
   public void setName(String name) {
     this.name = name;
-  }
-
-  @JsonIgnore
-  public String getNameOrId() {
-    if (name != null && !name.isEmpty()) {
-      return name;
-    }
-    return id;
   }
 
   public String[] getTags() {
@@ -89,36 +86,47 @@ public class ModuleDescriptor {
     this.tags = tags;
   }
 
-  public EnvEntry[] getEnv() {
-    return env;
+  @JsonIgnore
+  public InterfaceDescriptor[] getRequiresList() {
+    if (requires == null) {
+      return new InterfaceDescriptor[0];
+    } else {
+      return requires;
+    }
   }
 
-  public void setEnv(EnvEntry[] env) {
-    this.env = env;
-  }
-
-  public ModuleInterface[] getRequires() {
+  public InterfaceDescriptor[] getRequires() {
     return requires;
   }
 
-  public void setRequires(ModuleInterface[] requires) {
+  public void setRequires(InterfaceDescriptor[] requires) {
     this.requires = requires;
   }
 
-  public ModuleInterface[] getProvides() {
+  @JsonIgnore
+  public InterfaceDescriptor[] getProvidesList() {
+    if (provides == null) {
+      return new InterfaceDescriptor[0];
+    } else {
+      return provides;
+    }
+  }
+
+  public InterfaceDescriptor[] getProvides() {
     return provides;
   }
 
-  public void setProvides(ModuleInterface[] provides) {
+  public void setProvides(InterfaceDescriptor[] provides) {
     this.provides = provides;
   }
 
-  public RoutingEntry[] getRoutingEntries() {
-    return routingEntries;
-  }
-
-  public void setRoutingEntries(RoutingEntry[] routingEntries) {
-    this.routingEntries = routingEntries;
+  @JsonIgnore
+  public List<RoutingEntry> getFilterRoutingEntries() {
+    List<RoutingEntry> all = new ArrayList<>();
+    if (filters != null) {
+      Collections.addAll(all, filters);
+    }
+    return all;
   }
 
   /**
@@ -129,35 +137,22 @@ public class ModuleDescriptor {
    */
   @JsonIgnore
   public List<RoutingEntry> getProxyRoutingEntries() {
-    return getAllRoutingEntries("proxy");
+    List<RoutingEntry> all = new ArrayList<>();
+    for (InterfaceDescriptor mi : getProvidesList()) {
+      String t = mi.getInterfaceType();
+      if (t == null || t.equals("proxy") || t.equals("internal")) {
+        all.addAll(mi.getAllRoutingEntries());
+      }
+    }
+    return all;
   }
 
-  /**
-   * Get all routingEntries of given type.
-   *
-   * @param type "proxy" or "system" or "" for all types
-   * @param globaltoo true: include the global-level entries too
-   * @return a list of RoutingEntries
-   */
   @JsonIgnore
-  private List<RoutingEntry> getAllRoutingEntries(String type) {
+  public List<RoutingEntry> getMultiRoutingEntries() {
     List<RoutingEntry> all = new ArrayList<>();
-    if (routingEntries != null) {
-      Collections.addAll(all, routingEntries);
-    }
-    if (filters != null) {
-      Collections.addAll(all, filters);
-    }
-    ModuleInterface[] prov = getProvides();
-    if (prov != null) {
-      for (ModuleInterface mi : prov) {
-        String t = mi.getInterfaceType();
-        if (t == null || t.isEmpty()) {
-          t = "proxy";
-        }
-        if (type.isEmpty() || type.equals(t)) {
-          all.addAll(mi.getAllRoutingEntries());
-        }
+    for (InterfaceDescriptor mi : getProvidesList()) {
+      if ("multiple".equals(mi.getInterfaceType())) {
+        all.addAll(mi.getAllRoutingEntries());
       }
     }
     return all;
@@ -168,29 +163,16 @@ public class ModuleDescriptor {
    *
    * @param interfaceId name of the interface we want
    * @return null if not found, or the interface
-   *
-   * TODO - Take a version too, check compatibility
    */
   @JsonIgnore
-  public ModuleInterface getSystemInterface(String interfaceId) {
-    ModuleInterface[] provlist = getProvides();
-    if (provlist != null) {
-      for (ModuleInterface prov : provlist) {
+  public InterfaceDescriptor getSystemInterface(String interfaceId) {
+    for (InterfaceDescriptor prov : getProvidesList()) {
       if ("system".equals(prov.getInterfaceType())
         && interfaceId.equals(prov.getId())) {
         return prov;
-        }
       }
     }
     return null;
-  }
-
-  public String[] getModulePermissions() {
-    return modulePermissions;
-  }
-
-  public void setModulePermissions(String[] modulePermissions) {
-    this.modulePermissions = modulePermissions;
   }
 
   public UiModuleDescriptor getUiDescriptor() {
@@ -207,14 +189,6 @@ public class ModuleDescriptor {
 
   public void setLaunchDescriptor(LaunchDescriptor launchDescriptor) {
     this.launchDescriptor = launchDescriptor;
-  }
-
-  public String getTenantInterface() {
-    return tenantInterface;
-  }
-
-  public void setTenantInterface(String tenantInterface) {
-    this.tenantInterface = tenantInterface;
   }
 
   public Permission[] getPermissionSets() {
@@ -237,63 +211,69 @@ public class ModuleDescriptor {
    * Validate some features of a ModuleDescriptor.
    *
    * In case of Deprecated things, writes warnings in the log.
-   * TODO: Turn these into errors when releasing 2.0
    *
+   * @param pc
    * @return "" if ok, otherwise an informative error message.
    */
-  public String validate() {
-    if (getId() == null || getId().isEmpty()) {
-      return "No Id in module";
+  public String validate(ProxyContext pc) {
+    if (id == null) {
+      return "id is missing for module";
     }
-    if (!getId().matches("^[a-z0-9._-]+$")) {
-      return "Invalid id";
-    }
-    String mod = getNameOrId();
+    String mod = getId();
     if (provides != null) {
-      for (ModuleInterface pr : provides) {
-        String err = pr.validate("provides", mod);
+      for (InterfaceDescriptor pr : provides) {
+        String err = pr.validate(pc, "provides", mod);
         if (!err.isEmpty()) {
           return err;
         }
       }
     }
     if (requires != null) {
-      for (ModuleInterface pr : requires) {
-        String err = pr.validate("requires", mod);
+      for (InterfaceDescriptor pr : requires) {
+        String err = pr.validate(pc, "requires", mod);
         if (!err.isEmpty()) {
           return err;
         }
       }
+    } else {
+      pc.warn("Module '" + mod + "' "
+        + "has no Requires section. If the module really does not require "
+        + "any other interfaces, provide an empty array to be explicit about it.");
     }
     if (filters != null) {
       for (RoutingEntry fe : filters) {
-        String err = fe.validate("filters", mod);
+        String err = fe.validateFilters(pc, mod);
         if (!err.isEmpty()) {
           return err;
         }
       }
-    }
-    if (routingEntries != null) {
-      logger.warn("Module '" + this.getNameOrId() + "' "
-        + " uses DEPRECATED top-level routingEntries. Use handlers instead");
-      for (RoutingEntry re : routingEntries) {
-        String err = re.validate("toplevel", mod);
-        if (!err.isEmpty()) {
-          return err;
-        }
-      }
-    }
-    if (getEnv() != null) {
-      logger.warn("Module '" + this.getNameOrId() + "' "
-        + " uses DEPRECATED top-level environment settings. Put those "
-        + "in the launchDescriptor instead.");
-    }
-    if (getTenantInterface() != null) {
-      logger.warn("Module '" + this.getNameOrId() + "' "
-        + "uses DEPRECATED tenantInterface field."
-        + " Provide a '_tenant' system interface instead");
     }
     return "";
   }
 
+  @Override
+  public int compareTo(ModuleDescriptor other) {
+    return id.compareTo(other.id);
+  }
+
+  @Override
+  public boolean equals(Object that) {
+    if (this == that) {
+      return true;
+    }
+    if (!(that instanceof ModuleDescriptor)) {
+      return false;
+    }
+    return compareTo((ModuleDescriptor) that) == 0;
+  }
+
+  @Override
+  public int hashCode() {
+    return id.hashCode();
+  }
+
+  @JsonIgnore
+  public String getProduct() {
+    return id.getProduct();
+  }
 }

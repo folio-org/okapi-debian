@@ -4,48 +4,54 @@ import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
-import io.vertx.core.logging.LoggerFactory;
 import org.folio.okapi.common.Config;
 import org.folio.okapi.common.ExtendedAsyncResult;
-import org.folio.okapi.common.Failure;
+import org.folio.okapi.common.OkapiLogger;
 import org.folio.okapi.common.Success;
+import org.folio.okapi.service.DeploymentStore;
+import org.folio.okapi.service.EnvStore;
 import org.folio.okapi.service.ModuleStore;
 import org.folio.okapi.service.TenantStore;
-import org.folio.okapi.service.TimeStampStore;
 
 public class Storage {
 
   private MongoHandle mongo;
   private PostgresHandle postgres;
   private ModuleStore moduleStore;
-  private TimeStampStore timeStampStore;
   private TenantStore tenantStore;
+  private DeploymentStore deploymentStore;
+  private EnvStore envStore;
 
   public enum InitMode {
     NORMAL, // normal operation
     INIT, // create database at startup
     PURGE  // purge the whole database
-  };
+  }
   private JsonObject config;
-  private final Logger logger = LoggerFactory.getLogger("okapi");
+  private final Logger logger = OkapiLogger.get();
 
   public Storage(Vertx vertx, String type, JsonObject config) {
-    timeStampStore = new TimeStampMemory(vertx);
     this.config = config;
     switch (type) {
       case "mongo":
         mongo = new MongoHandle(vertx, config);
         moduleStore = new ModuleStoreMongo(mongo.getClient());
         tenantStore = new TenantStoreMongo(mongo.getClient());
+        deploymentStore = new DeploymentStoreMongo(mongo.getClient());
+        envStore = new EnvStoreMongo(mongo.getClient());
         break;
       case "inmemory":
-        moduleStore = new ModuleStoreMemory(vertx);
-        tenantStore = new TenantStoreMemory();
+        moduleStore = null;
+        tenantStore = null;
+        deploymentStore = new DeploymentStoreNull();
+        envStore = new EnvStoreNull();
         break;
       case "postgres":
         postgres = new PostgresHandle(vertx, config);
         moduleStore = new ModuleStorePostgres(postgres);
         tenantStore = new TenantStorePostgres(postgres);
+        deploymentStore = new DeploymentStorePostgres(postgres);
+        envStore = new EnvStorePostgres(postgres);
         break;
       default:
         logger.fatal("Unknown storage type '" + type + "'");
@@ -54,12 +60,12 @@ public class Storage {
   }
 
   public void prepareDatabases(InitMode initModeP, Handler<ExtendedAsyncResult<Void>> fut) {
-    String db_init = Config.getSysConf("mongo_db_init", "0", config);
-    if (mongo != null && "1".equals(db_init)) {
+    String dbInit = Config.getSysConf("mongo_db_init", "0", config);
+    if (mongo != null && "1".equals(dbInit)) {
       initModeP = InitMode.INIT;
     }
-    db_init = Config.getSysConf("postgres_db_init", "0", config);
-    if (postgres != null && "1".equals(db_init)) {
+    dbInit = Config.getSysConf("postgres_db_init", "0", config);
+    if (postgres != null && "1".equals(dbInit)) {
       logger.warn("Will initialize the whole database!");
       logger.warn("The postgres_db_init option is DEPRECATED!"
         + " use 'initdatabase' command (instead of 'dev' on the command line)");
@@ -67,25 +73,19 @@ public class Storage {
     }
     final InitMode initMode = initModeP;
     logger.info("prepareDatabases: " + initMode);
-    if (initMode == InitMode.NORMAL) {
-      fut.handle(new Success<>());
-    } else if (mongo != null) {
-      mongo.resetDatabases(fut);
-    } else if (postgres != null) {
-      TenantStorePostgres tnp = (TenantStorePostgres) tenantStore;
-        tnp.resetDatabase(initMode, res -> {
-          if (res.failed()) {
-            fut.handle(new Failure<>(res.getType(), res.cause()));
-          } else {
-            ModuleStorePostgres mnp = (ModuleStorePostgres) moduleStore;
-            mnp.resetDatabase(initMode, fut);
-          }
-        });
-  } else {
-      // inmemory will always ignore the database things, it always starts with
-      // nothing in its in-memory arrays
-      fut.handle(new Success<>());
-    }
+
+    boolean reset = initMode != InitMode.NORMAL;
+    envStore.init(reset, res1
+      -> deploymentStore.init(reset, res2 -> {
+        if (tenantStore == null) {
+          fut.handle(new Success<>());
+        } else {
+          tenantStore.init(reset, res3
+            -> moduleStore.init(reset, fut)
+          );
+        }
+      })
+    );
   }
 
   public ModuleStore getModuleStore() {
@@ -96,7 +96,12 @@ public class Storage {
     return tenantStore;
   }
 
-  public TimeStampStore getTimeStampStore() {
-    return timeStampStore;
+  public DeploymentStore getDeploymentStore() {
+    return deploymentStore;
   }
+
+  public EnvStore getEnvStore() {
+    return envStore;
+  }
+
 }

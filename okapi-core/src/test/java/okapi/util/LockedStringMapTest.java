@@ -3,10 +3,11 @@ package okapi.util;
 import org.folio.okapi.util.LockedStringMap;
 import io.vertx.core.Vertx;
 import io.vertx.core.logging.Logger;
-import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
+import org.folio.okapi.common.ErrorType;
+import org.folio.okapi.common.OkapiLogger;
 import org.junit.After;
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -20,17 +21,15 @@ import org.junit.runner.RunWith;
 @RunWith(VertxUnitRunner.class)
 public class LockedStringMapTest {
 
-  private final Logger logger = LoggerFactory.getLogger("okapi");
+  private final Logger logger = OkapiLogger.get();
 
-  public LockedStringMapTest() {
-  }
-
-  Vertx vertx;
-  Async async;
-  LockedStringMap map = new LockedStringMap();
+  private Vertx vertx;
+  private Async async;
+  private LockedStringMap map = new LockedStringMap();
 
   @Before
   public void setUp(TestContext context) {
+    logger.debug("starting LockedStringMapTest");
     vertx = Vertx.vertx();
   }
 
@@ -61,6 +60,20 @@ public class LockedStringMapTest {
   public void testadd(TestContext context) {
     map.addOrReplace(false, "k1", "k2", "FOOBAR", res -> {
       assertTrue(res.succeeded());
+      testReplaceTrue(context);
+    });
+  }
+
+  public void testReplaceTrue(TestContext context) {
+    map.addOrReplace(true, "k1", "k2", "FOOBAR", res -> {
+      assertTrue(res.succeeded());
+      testReplaceFalse(context);
+    });
+  }
+
+  public void testReplaceFalse(TestContext context) {
+    map.addOrReplace(false, "k1", "k2", "FOOBAR", res -> {
+      assertTrue(res.failed());
       testgetK12(context);
     });
   }
@@ -69,6 +82,22 @@ public class LockedStringMapTest {
     map.getString("k1", "k2", res -> {
       assertTrue(res.succeeded());
       assertEquals("FOOBAR", res.result());
+      testgetK13(context);
+    });
+  }
+
+  private void testgetK13(TestContext context) {
+    map.getString("k1", "k3", res -> {
+      assertTrue(res.failed());
+      assertEquals(ErrorType.NOT_FOUND, res.getType());
+      testgetK14(context);
+    });
+  }
+
+  private void testgetK14(TestContext context) {
+    map.getString("foo", "bar", res -> {
+      assertTrue(res.failed());
+      assertEquals(ErrorType.NOT_FOUND, res.getType());
       testgetK1(context);
     });
   }
@@ -115,6 +144,13 @@ public class LockedStringMapTest {
     map.remove("k1", "k2", res -> {
       assertTrue(res.succeeded());
       assertFalse(res.result()); // there is still k1/k2.2 left
+      deleteKey1again(context);
+    });
+  }
+
+  private void deleteKey1again(TestContext context) {
+    map.remove("k1", "k2", res -> {
+      assertTrue(res.failed());
       listKeys1(context);
     });
   }
@@ -131,14 +167,14 @@ public class LockedStringMapTest {
     map.remove("k1", "k2.2", res -> {
       assertTrue(res.succeeded());
       assertTrue(res.result()); // no keys left
-      testgetk1(context);
+      testgek1Lower(context);
     });
   }
 
-  private void testgetk1(TestContext context) {
+  private void testgek1Lower(TestContext context) {
     map.getString("k1", res -> {
-      assertTrue(res.succeeded());
-      assertEquals("[]", res.result().toString());
+      assertTrue(res.failed());
+      assertEquals(ErrorType.NOT_FOUND, res.getType());
       listKeys2(context);
     });
   }
@@ -152,7 +188,6 @@ public class LockedStringMapTest {
   }
 
   private void done(TestContext context) {
-    System.out.println("OK");
     async.complete();
   }
 

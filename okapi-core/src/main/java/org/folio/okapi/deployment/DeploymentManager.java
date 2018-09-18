@@ -1,16 +1,18 @@
 package org.folio.okapi.deployment;
 
 import com.codahale.metrics.Timer;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.logging.Logger;
-import io.vertx.core.logging.LoggerFactory;
+import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.UUID;
 import org.folio.okapi.bean.DeploymentDescriptor;
 import org.folio.okapi.bean.EnvEntry;
 import org.folio.okapi.bean.NodeDescriptor;
@@ -23,8 +25,11 @@ import org.folio.okapi.util.ModuleHandleFactory;
 import static org.folio.okapi.common.ErrorType.*;
 import org.folio.okapi.common.ExtendedAsyncResult;
 import org.folio.okapi.common.Failure;
+import org.folio.okapi.common.OkapiLogger;
 import org.folio.okapi.common.Success;
 import org.folio.okapi.env.EnvManager;
+import org.folio.okapi.util.CompList;
+import org.folio.okapi.common.Messages;
 
 /**
  * Manages deployment of modules. This actually spawns processes and allocates
@@ -32,75 +37,85 @@ import org.folio.okapi.env.EnvManager;
  */
 public class DeploymentManager {
 
-  private final Logger logger = LoggerFactory.getLogger("okapi");
-  LinkedHashMap<String, DeploymentDescriptor> list = new LinkedHashMap<>();
-  Vertx vertx;
-  Ports ports;
-  String host;
-  DiscoveryManager dm;
-  EnvManager em;
+  private final Logger logger = OkapiLogger.get();
+  private final LinkedHashMap<String, DeploymentDescriptor> list = new LinkedHashMap<>();
+  private final Vertx vertx;
+  private final Ports ports;
+  private final String host;
+  private final DiscoveryManager dm;
+  private final EnvManager em;
   private final int listenPort;
+  private final String nodeName;
+  private Messages messages = Messages.getInstance();
 
   public DeploymentManager(Vertx vertx, DiscoveryManager dm, EnvManager em,
-          String host, Ports ports, int listenPort) {
+    String host, Ports ports, int listenPort, String nodeName) {
     this.dm = dm;
     this.em = em;
     this.vertx = vertx;
     this.host = host;
     this.listenPort = listenPort;
     this.ports = ports;
+    this.nodeName = nodeName;
   }
 
   public void init(Handler<ExtendedAsyncResult<Void>> fut) {
     NodeDescriptor nd = new NodeDescriptor();
     nd.setUrl("http://" + host + ":" + listenPort);
     nd.setNodeId(host);
+    nd.setNodeName(nodeName);
     dm.addNode(nd, fut);
   }
 
   public void shutdown(Handler<ExtendedAsyncResult<Void>> fut) {
-    shutdownR(list.keySet().iterator(), fut);
-  }
-
-  private void shutdownR(Iterator<String> it, Handler<ExtendedAsyncResult<Void>> fut) {
-    if (!it.hasNext()) {
-      fut.handle(new Success<>());
-    } else {
-      DeploymentDescriptor md = list.get(it.next());
-      ModuleHandle mh = md.getModuleHandle();
-      mh.stop(future -> {
-        shutdownR(it, fut);
-      });
+    logger.info("fast shutdown");
+    CompList<Void> futures = new CompList<>(INTERNAL);
+    Collection<DeploymentDescriptor > col = list.values();
+    for (DeploymentDescriptor dd : col) {
+      ModuleHandle mh = dd.getModuleHandle();
+      Future<Void> f = Future.future();
+      mh.stop(f::handle);
+      futures.add(f);
     }
+    futures.all(fut);
   }
 
   public void deploy(DeploymentDescriptor md1, Handler<ExtendedAsyncResult<DeploymentDescriptor>> fut) {
     String id = md1.getInstId();
-    if (id != null) {
-      if (list.containsKey(id)) {
-        fut.handle(new Failure<>(USER, "already deployed: " + id));
-        return;
-      }
+    if (id != null && list.containsKey(id)) {
+      fut.handle(new Failure<>(USER, messages.getMessage("10700", id)));
+      return;
     }
     String srvc = md1.getSrvcId();
+    if (srvc == null) {
+      fut.handle(new Failure<>(USER, messages.getMessage("10701")));
+      return;
+    }
     Timer.Context tim = DropwizardHelper.getTimerContext("deploy." + srvc + ".deploy");
 
-    int use_port = ports.get();
-    if (use_port == -1) {
-      fut.handle(new Failure<>(INTERNAL, "all ports in use"));
+    int usePort = ports.get();
+    if (usePort == -1) {
+      fut.handle(new Failure<>(USER, messages.getMessage("10702")));
       tim.close();
       return;
     }
-    String url = "http://" + host + ":" + use_port;
+    String url = "http://" + host + ":" + usePort;
 
     if (id == null) {
-      id = host + "-" + use_port;
+      id = UUID.randomUUID().toString();
       md1.setInstId(id);
     }
     logger.info("deploy instId " + id);
+    deploy2(fut, tim, usePort, md1, url);
+  }
+
+  private void deploy2(Handler<ExtendedAsyncResult<DeploymentDescriptor>> fut,
+    Timer.Context tim, int usePort, DeploymentDescriptor md1, String url) {
+
     LaunchDescriptor descriptor = md1.getDescriptor();
     if (descriptor == null) {
-      fut.handle(new Failure<>(USER, "No LaunchDescriptor"));
+      ports.free(usePort);
+      fut.handle(new Failure<>(USER, messages.getMessage("10703")));
       tim.close();
       return;
     }
@@ -113,7 +128,8 @@ public class DeploymentManager {
     }
     em.get(eres -> {
       if (eres.failed()) {
-        fut.handle(new Failure<>(INTERNAL, "get env: " + eres.cause().getMessage()));
+        ports.free(usePort);
+        fut.handle(new Failure<>(INTERNAL, messages.getMessage("10704", eres.cause().getMessage())));
         tim.close();
       } else {
         for (EnvEntry er : eres.result()) {
@@ -127,23 +143,21 @@ public class DeploymentManager {
           }
           descriptor.setEnv(nenv);
         }
-        ModuleHandle mh = ModuleHandleFactory.create(vertx, descriptor, ports, use_port);
-
+        ModuleHandle mh = ModuleHandleFactory.create(vertx, descriptor, md1.getSrvcId(), ports, usePort);
         mh.start(future -> {
           if (future.succeeded()) {
             DeploymentDescriptor md2
-                    = new DeploymentDescriptor(md1.getInstId(), md1.getSrvcId(),
-                            url, md1.getDescriptor(), mh);
+              = new DeploymentDescriptor(md1.getInstId(), md1.getSrvcId(),
+                url, md1.getDescriptor(), mh);
             md2.setNodeId(md1.getNodeId() != null ? md1.getNodeId() : host);
             list.put(md2.getInstId(), md2);
             tim.close();
-            dm.add(md2, res -> {
-              fut.handle(new Success<>(md2));
-            });
+            dm.add(md2, res -> fut.handle(new Success<>(md2)));
           } else {
             tim.close();
-            ports.free(use_port);
-            fut.handle(new Failure<>(INTERNAL, future.cause()));
+            ports.free(usePort);
+            logger.warn("Deploying " + md1.getSrvcId() + " failed");
+            fut.handle(new Failure<>(USER, future.cause()));
           }
         });
       }
@@ -153,7 +167,7 @@ public class DeploymentManager {
   public void undeploy(String id, Handler<ExtendedAsyncResult<Void>> fut) {
     logger.info("undeploy instId " + id);
     if (!list.containsKey(id)) {
-      fut.handle(new Failure<>(NOT_FOUND, "not found: " + id));
+      fut.handle(new Failure<>(NOT_FOUND, messages.getMessage("10705", id)));
     } else {
       Timer.Context tim = DropwizardHelper.getTimerContext("deploy." + id + ".undeploy");
       DeploymentDescriptor md = list.get(id);
@@ -180,18 +194,17 @@ public class DeploymentManager {
 
   public void list(Handler<ExtendedAsyncResult<List<DeploymentDescriptor>>> fut) {
     List<DeploymentDescriptor> ml = new LinkedList<>();
-    for (String id : list.keySet()) {
-      ml.add(list.get(id));
+    for (Map.Entry<String, DeploymentDescriptor> entry : list.entrySet()) {
+      ml.add(entry.getValue());
     }
     fut.handle(new Success<>(ml));
   }
 
   public void get(String id, Handler<ExtendedAsyncResult<DeploymentDescriptor>> fut) {
     if (!list.containsKey(id)) {
-      fut.handle(new Failure<>(NOT_FOUND, "not found: " + id));
+      fut.handle(new Failure<>(NOT_FOUND, messages.getMessage("10705", id)));
     } else {
       fut.handle(new Success<>(list.get(id)));
     }
   }
-
 }

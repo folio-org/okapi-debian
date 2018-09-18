@@ -2,7 +2,6 @@ package org.folio.okapi.bean;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.annotation.JsonRawValue;
 
 /**
  * Tells how a module is to be deployed. Either by exec'ing a command (and
@@ -16,12 +15,10 @@ public class LaunchDescriptor {
   private String cmdlineStop;
   private String exec;
   private String dockerImage;
+  private Boolean dockerPull;
   private String[] dockerCMD;
   private EnvEntry[] env;
   private AnyDescriptor dockerArgs;
-
-  public LaunchDescriptor() {
-  }
 
   public String getCmdlineStart() {
     return cmdlineStart;
@@ -53,6 +50,14 @@ public class LaunchDescriptor {
 
   public void setDockerImage(String dockerImage) {
     this.dockerImage = dockerImage;
+  }
+
+  public Boolean getDockerPull() {
+    return dockerPull;
+  }
+
+  public void setDockerPull(Boolean dockerPull) {
+    this.dockerPull = dockerPull;
   }
 
   public String[] getDockerCMD() {

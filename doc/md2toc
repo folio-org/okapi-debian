@@ -5,23 +5,45 @@
 
 use strict;
 use warnings;
+use Getopt::Std;
 
-my $lowest = 1;
-my $highest = 99;
-while (@ARGV > 2) {
-    if ($ARGV[0] eq '-l') {
-        $lowest = $ARGV[1]; shift; shift;
-    } elsif ($ARGV[0] eq '-h') {
-        $highest = $ARGV[1]; shift; shift;
-    } elsif ($ARGV[0] =~ /^-/) {
-        print STDERR "Usage: md2toc [-l <lowest>] [-h <highest>] <FILE.md>\
-        -l <lowest> specified lowest heading level to include.\
-        -h <highest> specified highest heading level to include.\n";
-        exit 1;
-    } else {
-        last;
-    }
+my %opts = (l => 1, h => 99, s => 0);
+if (!getopts('l:h:s:a', \%opts)) {
+    goto USAGE;
 }
+
+if ($opts{a}) {
+    my $line = <STDIN>;
+    if (!$line) {
+	print STDERR "$0: no standard input: can't parse command\n";
+	exit 2;
+    }
+
+    chomp $line;
+    if ($line =~ /^\s*<!--\s*(.*?)\s*-->\s*$/) {
+	print "<!-- $1 -->\n";
+	exec $1;
+	die "exec '$1' failed: $!";
+    } else {
+	print STDERR "$0: can't parse command from '$line'\n";
+    }
+    exit;
+}
+
+if (@ARGV == 0) {
+  USAGE:
+    print STDERR "\
+Usage: md2toc [options] <FILE.md>\
+        -l <lowest> specifies lowest heading level to include.\
+        -h <highest> specifies highest heading level to include.\
+        -s <skip> skip the first few lines of generated output.\
+	-a specifies automatic mode: run command specified by HTML comment\n";
+    exit 1;
+}
+
+my $lowest = $opts{l};
+my $highest = $opts{h};
+my $skip = $opts{s};
 
 while (my $line = <>) {
     chomp $line;
@@ -30,7 +52,11 @@ while (my $line = <>) {
         next if $level < $lowest || $level > $highest;
         my $link = lc($line);
         $link =~ s/ /-/g;
-        $link =~ s/[^a-z0-9-]//g;
-        print '    ' x ($level-$lowest), "* [$line](#$link)\n";
+        $link =~ s/[^a-z0-9-_]//g;
+        if ($skip > 0) {
+            $skip--;
+        } else {
+            print '    ' x ($level-$lowest), "* [$line](#$link)\n";
+        }
     }
 }

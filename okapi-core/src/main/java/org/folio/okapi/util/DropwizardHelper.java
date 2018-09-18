@@ -9,17 +9,22 @@ import com.codahale.metrics.graphite.Graphite;
 import com.codahale.metrics.graphite.GraphiteReporter;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.logging.Logger;
-import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.dropwizard.DropwizardMetricsOptions;
 import java.net.InetSocketAddress;
 import java.util.concurrent.TimeUnit;
+import org.folio.okapi.common.OkapiLogger;
 
 /**
  * Helpers for the DropWizard instrumentation.
  */
+@java.lang.SuppressWarnings({"squid:S1192"})
 public class DropwizardHelper {
 
-  static Logger logger = LoggerFactory.getLogger("okapi");
+  private DropwizardHelper() {
+    throw new IllegalAccessError("DropwizardHelper");
+  }
+
+  private static Logger logger = OkapiLogger.get();
 
   public static void config(String graphiteHost, int port, TimeUnit tu,
           int period, VertxOptions vopt, String hostName) {

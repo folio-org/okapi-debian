@@ -1,10 +1,14 @@
 package org.folio.okapi.util;
 
+import io.vertx.core.Future;
 import org.folio.okapi.common.ExtendedAsyncResult;
 import org.folio.okapi.common.Failure;
 import org.folio.okapi.common.Success;
 import io.vertx.core.Handler;
 import io.vertx.core.json.Json;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import static org.folio.okapi.common.ErrorType.INTERNAL;
 
 public class LockedTypedMap1<T> extends LockedStringMap {
 
@@ -33,4 +37,35 @@ public class LockedTypedMap1<T> extends LockedStringMap {
       }
     });
   }
+
+  /**
+   * Get all records in the map. Returns them in a LinkedHashMap, so they come
+   * in well defined order.
+   *
+   * @param fut callback with the result, or some failure.
+   */
+  public void getAll(Handler<ExtendedAsyncResult<LinkedHashMap<String, T>>> fut) {
+    getKeys(kres -> {
+      if (kres.failed()) {
+        fut.handle(new Failure<>(kres.getType(), kres.cause()));
+        return;
+      }
+      Collection<String> keys = kres.result();
+      LinkedHashMap<String, T> results = new LinkedHashMap<>();
+      CompList<LinkedHashMap<String,T>> futures = new CompList<>(INTERNAL);
+      for (String key : keys) {
+        Future<String> f = Future.future();
+        getString(key, null, res -> {
+          if (res.succeeded()) {
+            T t = Json.decodeValue(res.result(), clazz);
+            results.put(key, t);
+          }
+          f.handle(res);
+        });
+        futures.add(f);
+      }
+      futures.all(results, fut);
+    });
+  }
+
 }
