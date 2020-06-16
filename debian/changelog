@@ -1,3 +1,19 @@
+folio-okapi (3.1.0-1) xenial; urgency=medium
+
+  * Imported Upstream version 3.1.0
+  * Introduced branding to package name to avoid conflicts with project forks
+  * Also introduced branding to username for the same reason
+  * Readying the package for current OSs (Debian 10, Ubuntu 20.04)
+  * Threw out a lot of nonfunctional trash from the past
+  * Threw out Java log rotation, to follow system standards
+  * Made a logrotate file for said service, see above
+  * Updated systemd unit file
+  * Fixed longstanding security/config issues (OKAPI-709, OKAPI-858)
+  * Updated the config to match documentation
+  * Introduced a proper installer
+
+ -- Jo Drexl <johannes.drexl@lrz.de>  Tue, 16 Jun 2020 16:26:32 +0200
+  
 okapi (2.17.5-1) xenial; urgency=medium
 
   * Imported Upstream version 2.17.5

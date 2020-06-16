@@ -3,16 +3,19 @@ Section: net
 Priority: extra
 Maintainer: Index Data <support@indexdata.com>
 Build-Depends: debhelper (>=9),
-        openjdk-8-jdk,
+        openjdk-8-jdk | openjdk-11-jdk,
         maven (>=3.3)
 Standards-Version: 3.9.6
 Homepage: https://github.com/folio-org/okapi
 
-Package: okapi
+Package: folio-okapi
 Architecture: all
-Depends: openjdk-8-jdk | openjdk-8-jre, 
+Depends: openjdk-8-jdk | openjdk-8-jre | openjdk-11-jre | openjdk-11-jdk, 
          adduser,
-         postgresql-client-common
+         postgresql-client-common,
+         whiptail (>= 0.52.18~),
+         bash (>= 4.3~)
+Suggests: curl, postgresql
 Description:  Multitenant API gateway for FOLIO
  Okapi is an implementation of some different patterns commonly 
  used within the microservice architecture. The most central of 

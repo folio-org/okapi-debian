@@ -57,17 +57,17 @@ install-stamp: build
 	$(INSTALLFILE)  $(OKAPIAUTH) $(OKAPIHOME)/lib/
 	$(INSTALLFILE)  $(OKAPITEST) $(OKAPIHOME)/lib/
 	$(INSTALLFILE) $(OKAPIHEADER) $(OKAPIHOME)/lib/
-	$(INSTALLBIN)  dist/okapi.sh $(OKAPIHOME)/bin/
+	$(INSTALLBIN)  dist/okapi-settings $(OKAPIHOME)/bin/
+	$(INSTALLBIN)  dist/setup_okapi.sh $(OKAPIHOME)/bin/
 
 	# configs
 	$(INSTALLDIR)  $(OKAPICONF)
 	$(INSTALLDIR)  $(OKAPISYSD)
-	$(INSTALLDIR)  $(OKAPIROOT)/etc/default
-	$(INSTALLFILE) dist/okapi.conf $(OKAPICONF)/
+	$(INSTALLFILE) dist/okapi.conf $(OKAPICONF)/okapi.conf.dpkg
 	$(INSTALLFILE) dist/hazelcast.xml $(OKAPICONF)/
 	$(INSTALLFILE) dist/log4j2.properties $(OKAPICONF)/
-	$(INSTALLFILE) dist/okapi.env $(OKAPIROOT)/etc/default/okapi
-	$(INSTALLFILE) debian/okapi.service $(OKAPISYSD)/
+	$(INSTALLFILE) dist/folio-okapi.service $(OKAPISYSD)/
+	$(INSTALLFILE) dist/folio-okapi.logrotate $(OKAPIROOT)/etc/logrotate.d/folio-okapi
 
 	# docs
 	$(INSTALLDIR) $(OKAPIDOC)

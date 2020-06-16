@@ -1,0 +1,39 @@
+[Unit]
+Description=FOLIO Okapi service
+Wants=postgresql.service docker.service
+After=network-online.target postgresql.service docker.service
+Requires=network-online.target
+
+[Service]
+Type=exec
+User=folio-okapi
+Group=folio-okapi
+PermissionsStartOnly=true
+ExecStartPre=/usr/share/folio/okapi/bin/okapi-settings
+ExecStart=/usr/bin/java -Djava.awt.headless=true \
+          -jar /usr/share/folio/okapi/lib/okapi-core-fat.jar \
+          -conf /dev/shm/okapi.json
+ExecStopPost=/bin/rm -f /dev/shm/okapi.json
+WorkingDirectory=/var/lib/folio/okapi
+SyslogIdentifier=folio-okapi
+
+# JVM exits with code 128+15 on default SIGTERM
+SuccessExitStatus=143
+
+# Send SIGKILL 90 seconds (systemd default) after SIGTERM has been issued 
+TimeoutStopSec=90
+
+# Wait 2 seconds before restarting Okapi, unless the restart has been issued 
+# 3 times within one minute, which would indicate a persistent grave problem
+Restart=always
+RestartSec=2
+StartLimitBurst=3
+StartLimitInterval=60
+
+# Specifies the maximum file descriptor number that can be opened
+# Maximum number for the kernel can be viewed in /proc/sys/fs/file-max
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+Alias=okapi.service

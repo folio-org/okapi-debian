@@ -1,0 +1,15 @@
+# Okapi logrotate config file
+
+/var/log/folio/okapi/*.log
+{
+  daily
+  rotate 6
+  ifempty
+  missingok
+  dateext
+  dateyesterday
+  dateformat -%Y-%m-%d
+  compress
+  delaycompress
+  create 0640 okapi adm
+}

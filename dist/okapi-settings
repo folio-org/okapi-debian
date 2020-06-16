@@ -1,0 +1,158 @@
+#!/bin/bash
+
+# okapi-settings
+# Prepares a settings file in json format
+
+# The developers of Okapi provide normal system configs only to read them out 
+# and pipe all options in as parameters to the called jar INCLUDING
+# usernames and passwords to the central database, so everybody with capability
+# to use ps/top/whatever has the credentials too.
+# Their way of 'solving' that grave security mistake is to provide an 
+# alternative to this behavior by adding a parameter which takes the config, 
+# but only in JSON format (I mean, really?). My reply is a shell script that 
+# translates the format, so I can be lazy and still work with the original 
+# config file while using the security conscious approach. 
+
+
+# ================================= Copyright =================================
+# Version 0.1.4 (2020-06-09), Copyright (C) 2019-2020
+# Author: Jo Drexl (johannes.drexl@lrz.de) for Leibniz Supercomputing Centre
+# Coauthors: -
+
+#   This file is part of the LRZ FOLIO deployment package
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#    http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#   On Debian systems, the full text of the Apache License version 2.0
+#   can be found in the file 
+#     `/usr/share/common-licenses/Apache-2.0'
+
+
+# ================================= Variables =================================
+
+# Standard OKAPI config file
+OS_CONFFILE="/etc/folio/okapi/okapi.conf"
+
+# Systemd file (absolute path)
+OS_SYSTEMD="/lib/systemd/system/folio-okapi.service"
+
+
+# ================================= Functions =================================
+
+# Converting a classic config line (FOO=bar) to JSON ("FOO": "bar")
+os_convert() {
+  # Takes the variable/value pair as parameter 1
+  # Returns 0 on success
+  # Returns 1 on errors
+  # Returns the converted pair in OS_CONVERTED
+  
+  # Set local variables
+  local INPUT="$1"
+  local VAR
+  local VAL
+  
+  # Check if line doesn't contain an equality sign
+  if ! echo "$INPUT" | grep "=" > /dev/null
+    then
+      # Empty output variable and return error
+      OS_CONVERTED=""
+      return 1
+  fi
+  
+  # Get variable and value
+  VAR=$(echo "$INPUT" | cut -d "=" -f 1)
+  VAL=$(echo "$INPUT" | cut -d "=" -f 2)
+  
+  # Handle values enclosed in double quotes (stripping them off)
+  if echo "$VAL" | grep -E '^"' > /dev/null
+    then
+      VAL=$(echo "$VAL" | cut -d '"' -f 2)
+  # For all others strip away following spaces and other stuff
+  elif echo "$VAL" | grep " " > /dev/null
+    then
+      VAL=$(echo "$VAL" | cut -d ' ' -f 1)
+  fi
+  
+  # Build a JSON line and return
+  OS_CONVERTED="\"$VAR\": \"$VAL\""
+  # Enable this to log everything (DEVELOPMENT ONLY!)
+  #echo "$OS_CONVERTED"
+  return 0
+}
+
+
+# =============================== Prerequisites ===============================
+
+# We're setting the path variable anew because some systems have that wrong
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Get script location
+OS_SCRIPT="${BASH_SOURCE[0]}"
+
+# Check if being root
+if [ "$(whoami)" != "root" ]
+  then
+    echo "$OS_SCRIPT has to be invocated as root!"
+    exit 1
+fi
+
+# Read out important stuff from the systemd unit file
+OS_SYSGROUP=$(grep "Group=" "$OS_SYSTEMD" | cut -d "=" -f 2)
+OS_JSONFILE=$(grep -A 5 "ExecStart=" "$OS_SYSTEMD" | \
+              grep -oPm 1 " -conf [-a-zA-Z\/\_\.]+" | cut -d " " -f 3)
+
+# Probe for the config file
+if [ ! -f "$OS_CONFFILE" ]
+  then
+    echo "Config file could not be found!"
+    exit 1
+fi
+  
+# (Re-) Create JSON file and prevent information leaks
+rm -f "$OS_JSONFILE"
+touch "$OS_JSONFILE"
+chown root:"$OS_SYSGROUP" "$OS_JSONFILE"
+chmod 640 "$OS_JSONFILE"
+# Set the last character of the previous line - in the beginning this will be
+# the first character, which needs to be a left curly bracket)
+OS_JSONLINEEND="{"
+
+
+# =================================== Main ====================================
+
+# Read the config file line by line and write the JSON temp file
+while read LINE
+  do
+    # Ignore comments and empty lines
+    if echo "$LINE" | grep -E "^(\s+)?(#.*)?$" > /dev/null 2>&1
+      then
+        continue
+    fi
+    # Build a json format line
+    if os_convert "$LINE"
+      then
+        # Build the file inside OS_JSON
+        OS_JSON="$OS_JSON$OS_JSONLINEEND\n  $OS_CONVERTED"
+        # Reset the last character of the previous line to be a comma
+        OS_JSONLINEEND=","
+      else
+        echo "Line '$LINE' could not be processed!"
+        continue
+    fi
+  done < "$OS_CONFFILE"
+  
+# Finalize the JSON file
+echo -e "$OS_JSON\n}" >> "$OS_JSONFILE"
+
+# This movie is over
+exit $?
