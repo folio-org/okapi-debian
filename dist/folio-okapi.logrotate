@@ -11,5 +11,5 @@
   dateformat -%Y-%m-%d
   compress
   delaycompress
-  create 0640 okapi adm
+  create 0640 folio-okapi adm
 }
