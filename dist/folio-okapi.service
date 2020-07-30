@@ -34,6 +34,11 @@ StartLimitInterval=60
 # Maximum number for the kernel can be viewed in /proc/sys/fs/file-max
 LimitNOFILE=65536
 
+# Because some dev thought it a great idea to grab a global hardcoded 
+# vert.x cache directory for whoever takes it first, we have to sandbox here,
+# in case other java processes are using vert.x too.
+PrivateTmp=true
+
 [Install]
 WantedBy=multi-user.target
 Alias=okapi.service

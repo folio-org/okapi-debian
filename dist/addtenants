@@ -1,0 +1,542 @@
+#!/bin/bash
+
+# addtenants
+# Brings Okapi up to date with tenants, mostly during setup. For that it reads
+# an automated setup file, the tenant config file in /etc/folio and asks Okapi.
+# At least one tenant aside the supertenant has to be present; if that cannot
+# be assured, it asks the user.
+# It can be used to add further tenants to Okapi and the config file, if it's
+# invocated with a tenant name as parameter 1.
+
+
+# ================================= Copyright =================================
+# Version 0.0.2 (2020-07-30), Copyright (C) 2020
+# Author: Jo Drexl (johannes.drexl@lrz.de) for FOLIO
+# Coauthors: -
+
+#   This file is part of the LRZ FOLIO debian package
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#    http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#   On Debian systems, the full text of the Apache License version 2.0
+#   can be found in the file 
+#     `/usr/share/common-licenses/Apache-2.0'
+
+
+# ================================= Variables =================================
+
+# Path to a tenant config file for modules
+AT_TENANTFILE="/etc/folio/tenants"
+
+# Path to a configuration file for automated setups (CSV)
+AT_AUTOSETUP="/tmp/folio_setup/tenants"
+
+# Okapi conffile
+AT_OKAPICONF="/etc/folio/okapi/okapi.conf"
+# Timeout for Okapi connections
+AT_TIMEOUT="90"
+
+# We need that as storage point for all json files
+AT_TEMPDIR="/tmp/folio_tenantsetup"
+
+
+# ================================= Functions =================================
+
+# Adds all tenants to okapi and the tenant config file
+at_addtenants() {
+  # Returns 0 on success
+  # Returns 1 on failure
+  
+  # Local variables
+  local RETCODE="0"
+  local RETURN
+  local TENANTID
+  
+  # Check if there's something to do (should be)
+  if [ "$AT_ADDTENANTS" = "" ]
+    then
+      echo "No tenants to add for 'at_addtenants'"
+      return 1
+  fi
+  
+  # Tackle tenants one by one
+  while read TENANTID
+    do
+      # Check if tenant ID is emtpy (shouldn't be)
+      if [ "$TENANTID" = "" ]
+        then
+          # Ignore it silently
+          continue
+      fi
+      # Check if there's a jar file (should be)
+      if [ ! -f "$AT_TEMPDIR/$TENANTID.json" ]
+        then
+          # Ooopsidaisy!
+          RETCODE="1"
+          continue
+      fi
+      # Contact Okapi
+      RETURN="$(curl -d @"$AT_TEMPDIR/$TENANTID.json" -D - -s -H \
+                  "Content-type: application/json" -w '\n' -X POST "$AT_URL")"
+      # Check if everything went smoothly
+      if echo -e "$RETURN" | grep "HTTP/1.1 201 Created" > /dev/null 2>&1
+        then
+          # Delete the tenant json
+          rm -f "$AT_TEMPDIR/$TENANTID.json"
+          # Write the tenant to the tenant file, only if it's not there yet
+          if ! grep -E "^$TENANTID$" "$AT_TENANTFILE" >/dev/null 2>&1
+            then
+              echo "$TENANTID" >> "$AT_TENANTFILE"
+          fi
+          # Message user
+          echo "Added '$TENANTID'."
+        else
+          # Don't know what went wrong
+          RETCODE="1"
+      fi
+    done <<<"$AT_ADDTENANTS"
+  
+  # If everything went smoothly, no json files should be left - check!
+  if [ "$(ls -1 "$AT_TEMPDIR" | wc -l)" != "0" ]
+    then
+      RETCODE="1"
+  fi
+  # Now we're done; return with code
+  return "$RETCODE"
+}
+  
+# Writes json files for all tenants in the autosetup file and gives them back
+at_autoconfigure() {
+  # Returns 0 on success
+  # Returns 1 on failure
+  # Echoes all configured tenants on success
+  
+  # Local variables
+  local LINE
+  local TENANTDESC
+  local TENANTID
+  local TENANTNAME
+  local TENANTS
+
+  # Check for tenant autosetup file
+  if [ ! -f "$AT_AUTOSETUP" ]
+    then
+      # Nothing to do
+      return 0
+  fi
+  
+  # Read the file line by line
+  while read LINE
+    do
+      # Ignore comments and lines not fitting the csv format
+      # Tenant ID may contain alphanumerics, hyphens and underscores
+      # Tenant name and description may contain all of the above plus spaces
+      # All fields may not start or end on hyphen, space or underscore
+      # (although read disregards trailing spaces in the line, which is nice)
+      if ! echo "$LINE" | grep -E "^[a-zA-Z0-9][-a-zA-Z0-9_]+[a-zA-Z0-9];[a-zA-Z0-9][-a-zA-Z0-9_ ]+[a-zA-Z0-9];[a-zA-Z0-9][-a-zA-Z0-9_ ]+[a-zA-Z0-9]$" > /dev/null 2>&1
+        then
+          # Line doesn't fit
+          continue
+      fi
+      # Cut up the line
+      TENANTID="$(echo "$LINE" | cut -d ";" -f 1 -s)"
+      TENANTNAME="$(echo "$LINE" | cut -d ";" -f 2 -s)"
+      TENANTDESC="$(echo "$LINE" | cut -d ";" -f 3 -s)"
+      # Weed out what already is known to okapi (should not happen)
+      if echo "$AT_EXISTING" | grep "^$TENANTID$" > /dev/null 2>&1
+        then
+          continue
+      fi
+      # Don't let the user create the tenant 'supertenant'
+      if [ "$TENANTID" = "supertenant" ]
+        then
+          continue
+      fi
+      # Write the json file
+      # If duplicated tenant IDs were given, the last prevails; it's a hard
+      # life out there
+      cat > "$AT_TEMPDIR/$TENANTID.json" <<END
+{
+  "id": "$TENANTID",
+  "name": "$TENANTNAME",
+  "description": "$TENANTDESC"
+}
+END
+      # Add the tenant to the list
+      TENANTS="$(echo -e "$TENANTS\n$TENANTID")"
+    done < "$AT_AUTOSETUP"
+  
+  # Sort the tenant list; weed out erroneous duplicates
+  TENANTS="$(echo "$TENANTS" | sort -u)"
+  
+  # All is proper
+  echo "$TENANTS"
+  return 0
+}
+
+# Collects tenants mentioned in the config directory and in the autosetup file
+at_getconfigured() {
+  # Returns 0 on success
+  # Returns 1 on failure
+  # Echoes all configured tenants on success
+  
+  # Local variables
+  local TENANTDESC
+  local TENANTID
+  local TENANTNAME
+  local TENANTS
+  local TENANTS_AUTO
+  local TENANTS_FILE
+  
+  
+  if [ -f "$AT_TENANTFILE" ]
+    then
+      # Read the config file line by line and check for additional tenants
+      while read TENANTID
+        do
+          # Weed out everything that does not qualify as tenant ID
+          if ! echo "$TENANTID" | grep -E "^[-a-zA-Z0-9_]+[a-zA-Z0-9]$" > /dev/null 2>&1
+            then
+              continue
+          fi
+          # Weed out what already is known to okapi (should not happen)
+          if echo "$AT_EXISTING" | grep "^$TENANTID$" > /dev/null 2>&1
+            then
+              continue
+          fi
+          # Since we miss out additional information about the tenants, but should
+          # avoid to ask to not break automated setups, we use the tenant ID for
+          # everything
+          TENANTNAME="$TENANTID"
+          TENANTDESC="$TENANTID"
+          # Write the json file
+          cat > "$AT_TEMPDIR/$TENANTID.json" <<END
+{
+  "id": "$TENANTID",
+  "name": "$TENANTNAME",
+  "description": "$TENANTDESC"
+}
+END
+          # Add the tenant to the list
+          TENANTS_FILE="$(echo -e "$TENANTS_FILE\n$TENANTID")"
+        done < "$AT_TENANTFILE"
+  fi
+  
+  # Get tenants from the autosetup file
+  # This may overwrite already existing json files, but since we're provided
+  # with more information here, that's fine
+  TENANTS_AUTO="$(at_autoconfigure)"
+  
+  # Sort the tenant list; weed out empty lines and duplicates
+  TENANTS="$(echo -e "$TENANTS_AUTO\n$TENANTS_FILE" | grep -E "[-a-zA-Z0-9_]+" | sort -u)"
+  
+  # All is proper
+  echo "$TENANTS"
+  return 0
+}
+
+# Asks Okapi for all tenants
+at_getexisting() {
+  # Returns 0 on success
+  # Returns 1 on failure
+  # Echoes all existing tenants on success
+
+  # Local variables
+  # Implement timeout
+  local ITERATION="$AT_TIMEOUT"
+  local TENANTS
+  
+  # Get current tenants
+  while true
+    do
+      # Give a little update every ten seconds
+      if [ "${ITERATION: -1}" = "0" ]
+        then
+          echo "Waiting for okapi service to accept connections for max. $ITERATION seconds..." >&2
+      fi
+      # Try to connect and get the tenants
+      TENANTS=$(curl -w '\n' "$AT_URL" 2>/dev/null | grep '"id" :' | cut -d '"' -f 4 | sort -u)
+      # There has to be at least the supertenant, otherwise Okapi is not ready yet
+      if echo "$TENANTS" | grep "supertenant" >/dev/null 2>&1
+        then
+          # Cut out the supertenant, it is of no use to us
+          TENANTS=$(echo "$TENANTS" | grep -v "supertenant" 2>/dev/null)
+          # If no other tenants are existing, this will result in a non-zero 
+          # exit status, but that is fine, as it is expected for a first time
+          # setup
+          break
+      fi
+      # Bail out if there was no connection possible
+      if [ "$ITERATION" = "0" ]
+        then
+          return 1
+      fi
+      # Count down
+      ITERATION="$(( $ITERATION - 1 ))"
+      sleep 1
+    done
+
+  # All is proper
+  echo "$TENANTS"
+  return 0
+}
+
+# Asks the user for tenants
+at_tenantask() {
+  # Expects a question text as parameter 1
+  # Can optionally take a tenant ID as parameter 2
+  # Returns 0 on success
+  # Returns 1 on failure
+  # Echoes a single tenant or nothing, if the user is done
+
+  # Local variables
+  local ERROR="0"
+  local REPEAT="1"
+  local TENANTDESC
+  local TENANTID="$2"
+  local TENANTNAME
+  local TEXT="$1"
+
+  # Internal check for correct invocation
+  if [ "$TEXT" = "" ]
+    then
+      # No text provided
+      return 1
+  fi
+  
+  # Loop the question, to fetch wrong inputs
+  while [ "$REPEAT" = "1" ]
+    do
+      if ! TENANTID=$(whiptail --title "Okapi - Tenants setup" \
+                      --inputbox "$TEXT:" 8 78 "$TENANTID" 3>&1 1>&2 2>&3)
+        then
+          # Return without echo
+          return 1
+      fi
+      # Weed out everything that does not qualify as tenant ID
+      if ! echo "$TENANTID" | grep -E "^[-a-zA-Z0-9_]+[a-zA-Z0-9]$" > /dev/null 2>&1
+        then
+          ERROR="1"
+      fi
+      # Weed out what already is known to okapi
+      if echo "$AT_EXISTING" | grep "^$TENANTID$" > /dev/null 2>&1
+        then
+          ERROR="1"
+      fi
+      # Don't let the user create the tenant 'supertenant'
+      if [ "$TENANTID" = "supertenant" ]
+        then
+          ERROR="1"
+      fi
+      # Message the user on errors
+      if [ "$ERROR" = "1" ]
+        then
+          export NEWT_COLORS='root=,red'
+          whiptail --title "Okapi - Tenant error" --msgbox \
+            "'$TENANTID' is not a valid new tenant ID!" 8 78 3>&1 1>&2 2>&3
+          export NEWT_COLORS=""
+          ERROR="0"
+          continue
+      fi
+      # Those are not critical
+      if ! TENANTNAME=$(whiptail --title "Okapi - Tenants setup" \
+                    --inputbox "Provide a human readable name:" 8 78 \
+                    "$TENANTID" 3>&1 1>&2 2>&3)
+        then
+          # Return without echo
+          return 1
+      fi
+      if ! TENANTDESC=$(whiptail --title "Okapi - Tenants setup" \
+                    --inputbox "Provide a description:" 8 78 \
+                    "$TENANTNAME" 3>&1 1>&2 2>&3)
+        then
+          # Return without echo
+          return 1
+      fi
+      # Write the json file
+      cat > "$AT_TEMPDIR/$TENANTID.json" <<END
+{
+  "id": "$TENANTID",
+  "name": "$TENANTNAME",
+  "description": "$TENANTDESC"
+}
+END
+      # Exit the loop
+      REPEAT="0"
+      break
+    done
+  # Give back the tenant ID and return
+  echo "$TENANTID"
+  return 0
+}
+
+# Manages user interaction
+at_tenantquiz() {
+  # Returns 0 on success
+  # Returns 2 on empty list
+  # Echoes a sorted list of all configured tenants
+
+  # Local variables
+  local ITERATION="1"
+  local TENANT
+  local TENANTS
+  local TEXT="Provide a tenant for your installation"
+  
+  # Roll through the iterations
+  while [ "$ITERATION" != "0" ]
+    do
+      # Set text for second and following iterations
+      if [ "$ITERATION" = "2" ]
+        then
+          TEXT="Provide another tenant (or press cancel)"
+      fi
+      # Ask the user, disregard the return code
+      TENANT="$(at_tenantask "$TEXT")"
+      # Do not allow empty string in the first iteration
+      if [ "$ITERATION" = "1" -a "$TENANT" = "" ]
+        then
+          export NEWT_COLORS='root=,red'
+          whiptail --title "Okapi - Tenant error" --msgbox \
+            "Need at least one tenant to continue!" 8 78 3>&1 1>&2 2>&3
+          export NEWT_COLORS=""
+          continue
+      fi
+      # An empty string here means the user is finished with adding tenants
+      if [ "$TENANT" = "" ]
+        then
+          ITERATION="0"
+          break
+      fi
+      # All other strings are just added to the list of tenants
+      TENANTS="$(echo -e "$TENANTS\n$TENANT")"
+      ITERATION=$(( $ITERATION + 1 ))
+    done
+  
+  # Will do sorting and returns
+  TENANTS="$(echo "$TENANTS" | sort -u)"
+  echo "$TENANTS"
+  return "$?"
+}
+
+
+# =============================== Prerequisites ===============================
+
+# We're setting the path variable anew because some systems have that wrong
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Fetch parameter
+AT_MANUAL="$1"
+
+# Get script location
+OS_SCRIPT="${BASH_SOURCE[0]}"
+
+# Check if being root
+if [ "$(whoami)" != "root" ]
+  then
+    echo "$OS_SCRIPT has to be invocated as root!"
+    exit 1
+fi
+
+# Check for Okapi config
+if [ ! -f "$AT_OKAPICONF" ]
+  then
+    echo "Okapi config could not be found!"
+    exit 1
+fi
+#  Read the port, it's the only dynamic thing we're interested in
+if ! AT_OKAPIPORT="$(grep -E "^port=" "$AT_OKAPICONF" | grep -oE "[0-9]+")"
+  then
+    echo "Can't find Okapi port!"
+    exit 1
+fi
+# Build the connection URL
+AT_URL="http://localhost:$AT_OKAPIPORT/_/proxy/tenants"
+
+# (Re-)create temp directory
+rm -rf "$AT_TEMPDIR"
+mkdir -p "$AT_TEMPDIR"
+
+
+# =================================== Main ====================================
+
+# Get all existing tenants from Okapi, in case some are already there
+# If the timeout is reached, exit hard
+if ! AT_EXISTING="$(at_getexisting)"
+  then
+    # Clean up
+    rm -rf "$AT_TEMPDIR"
+    echo "Could not reach okapi, setup can't continue!"
+    exit 1
+fi
+
+# This is to get tenants from both the tenant config file in /etc/folio or
+# the autosetup file; no need for both to exist for correct return
+AT_CONFIGURED="$(at_getconfigured)"
+
+# Manual invocation will now be proceeded
+if [ "$AT_MANUAL" != "" ]
+  then
+    if ! AT_ADDTENANTS="$(at_tenantask "Provide a new tenant" "$AT_MANUAL")"
+      then
+        echo "User aborted."
+        exit 0
+    fi
+fi
+
+# Now look if both are empty, and no tenant was provided as parameter 1,
+# in which case asking is inevitable
+if [ "$AT_CONFIGURED$AT_EXISTING" = "" -a "$AT_ADDTENANTS" = "" ]
+  then
+    AT_ADDTENANTS="$(at_tenantquiz)"
+elif [ "$AT_ADDTENANTS" = "" ]
+  then
+    # Check which tenants are configured but not existing
+    AT_ADDTENANTS="$(comm -13 <(echo "$AT_EXISTING") <(echo "$AT_CONFIGURED"))"
+fi
+
+# Now there should be tenants to add, or at least some existing - check that!
+if [ "$AT_ADDTENANTS" = "" ]
+  then
+    if [ "$AT_EXISTING" = "" ]
+      then
+        # Clean up
+        rm -rf "$AT_TEMPDIR"
+        # We can't continue if there's no tenants
+        echo "No tenants to add and none existing, we're out of options!"
+        exit 1
+      else
+        # Everything is fine
+        # Clean up
+        rm -rf "$AT_TEMPDIR"
+        exit 0
+    fi
+fi
+
+# If the configuration file is not there, create it and pipe in a small intro
+if [ ! -f "$AT_TENANTFILE" ]
+  then
+    echo -e "# Created by Okapi setup\n# To add further tenants here, make sure to first create them in Okapi or use\n#     /usr/share/folio/okapi/bin/addtenants <tenant>\n# to handle everything.\n" > "$AT_TENANTFILE"
+fi
+
+# Add the tenants to okapi and the configuration file (for all modules to use)
+if ! at_addtenants
+  then
+    echo "Some errors have been encountered."
+    echo "Tenants found in '$AT_TEMPDIR' could not be added to Okapi."
+    exit 0
+fi
+
+# Clean up
+rm -rf "$AT_TEMPDIR"
+echo "All tenants successfuly added."
+exit 0

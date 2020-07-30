@@ -5,7 +5,7 @@
 
 
 # ================================= Copyright =================================
-# Version 0.1.4 (2020-06-04), Copyright (C) 2020
+# Version 0.1.5 (2020-07-21), Copyright (C) 2020
 # Author: Jo Drexl (johannes.drexl@lrz.de) for FOLIO
 # Coauthors: -
 
@@ -31,7 +31,7 @@
 # ================================= Variables =================================
 
 # Config example file (absolute path)
-FO_EXAMPLE="/usr/share/doc/folio/okapi/okapi.conf.example"
+FO_EXAMPLE="/usr/share/doc/folio/okapi/okapi.conf.debian"
 
 # Final config file (absolute path)
 FO_CONFIG="/etc/folio/okapi/okapi.conf"
@@ -160,7 +160,10 @@ if ! whiptail --title "Okapi - Database" --yesno \
     # Use a random string for an empty password
     if [ "$FO_PGPASSWD" = "" ]
       then
-        FO_PGPASSWD=$(</dev/urandom tr -dc 'A-Za-z0-9!#$%&()*+,-./:;<=>?@[]^_`{|}~' | head -c 24)
+        FO_PGPASSWD=$(</dev/urandom tr -dc 'A-Za-z0-9!#$%&()*+,-./:;<>?@[]^_`{|}~' | head -c 24)
+      else
+        # Strip forbidden characters to avoid problems
+        FO_PGPASSWD=$(echo "$FO_PGPASSWD" | tr -dc 'A-Za-z0-9!#$%&()*+,-./:;<>?@[]^_`{|}~')
     fi
 fi
 
@@ -182,9 +185,10 @@ if [ "$FO_DATABASE" = "postgres" ]
   then
     sed -i "s/^postgres_host=.*/postgres_host=\"$FO_PGSERVER\"/g" "$FO_TEMP" && \
     sed -i "s/^postgres_port=.*/postgres_port=\"$FO_PGPORT\"/g" "$FO_TEMP" && \
-    sed -i "s/^postgres_user=.*/postgres_user=\"$FO_PGUSER\"/g" "$FO_TEMP" && \
+    sed -i "s/^postgres_username=.*/postgres_username=\"$FO_PGUSER\"/g" "$FO_TEMP" && \
     sed -i "s/^postgres_database=.*/postgres_database=\"$FO_PGDATABASE\"/g" "$FO_TEMP" && \
-    sed -i "s/^postgres_password=.*/postgres_password=\"$FO_PGPASSWD\"/g" "$FO_TEMP"
+    sed -i "s'^postgres_password=.*'postgres_password=\"$FO_PGPASSWD\"'g" "$FO_TEMP"
+    # Using a denominator that is already forbidden in the password
 fi
 
 # Move the temporary file to the config file

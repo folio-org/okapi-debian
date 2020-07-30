@@ -57,6 +57,7 @@ install-stamp: build
 	$(INSTALLFILE)  $(OKAPIAUTH) $(OKAPIHOME)/lib/
 	$(INSTALLFILE)  $(OKAPITEST) $(OKAPIHOME)/lib/
 	$(INSTALLFILE) $(OKAPIHEADER) $(OKAPIHOME)/lib/
+	$(INSTALLBIN)  dist/addtenants $(OKAPIHOME)/bin/
 	$(INSTALLBIN)  dist/okapi-settings $(OKAPIHOME)/bin/
 	$(INSTALLBIN)  dist/setup_okapi.sh $(OKAPIHOME)/bin/
 
